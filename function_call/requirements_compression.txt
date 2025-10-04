@@ -1,0 +1,14 @@
+# 上下文压缩功能依赖
+# 安装: pip install -r requirements_compression.txt
+
+# Token计数库（必需）
+tiktoken>=0.5.0
+
+# 已有依赖（如果未安装需要添加）
+openai>=1.0.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+schedule>=1.2.0
+

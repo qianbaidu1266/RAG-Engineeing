@@ -1,0 +1,126 @@
+# ============================================
+# 上下文压缩配置示例
+# ============================================
+# 复制此配置到 .env 文件中使用
+
+# ============================================
+# API配置
+# ============================================
+DASHSCOPE_API_KEY=your_api_key_here
+
+# ============================================
+# 上下文压缩配置
+# ============================================
+
+# 是否启用上下文压缩
+# 值: true | false
+# 说明: 设为false将保留完整对话历史（不推荐用于生产）
+ENABLE_COMPRESSION=true
+
+# 压缩策略
+# 值: sliding_window | token_limit | smart_truncate | hybrid
+# 说明: 
+#   - sliding_window: 滑动窗口，保留最近N条消息
+#   - token_limit: Token限制，严格控制token数量
+#   - smart_truncate: 智能截断，保留重要消息
+#   - hybrid: 混合策略，推荐用于生产环境
+COMPRESSION_STRATEGY=hybrid
+
+# 最大消息数量
+# 说明: 压缩后保留的最大消息条数
+# 推荐值: 15-25 (根据对话复杂度调整)
+MAX_MESSAGES=20
+
+# 最大Token数量
+# 说明: 压缩后的最大token数（包括所有消息）
+# 推荐值: 4000-8000
+# 注意: 应预留20%余量，不要设为模型上限
+MAX_TOKENS=6000
+
+# 压缩触发阈值
+# 说明: 当消息数超过此值时才触发压缩
+# 推荐值: MAX_MESSAGES的50%-80%
+# 示例: MAX_MESSAGES=20时，设为10-15
+COMPRESSION_THRESHOLD=10
+
+# ============================================
+# 不同场景的推荐配置
+# ============================================
+
+# 【场景1：简单问答系统】
+# COMPRESSION_STRATEGY=sliding_window
+# MAX_MESSAGES=15
+# MAX_TOKENS=4000
+# COMPRESSION_THRESHOLD=8
+
+# 【场景2：客服对话（推荐）】
+# COMPRESSION_STRATEGY=hybrid
+# MAX_MESSAGES=20
+# MAX_TOKENS=6000
+# COMPRESSION_THRESHOLD=10
+
+# 【场景3：复杂工具调用】
+# COMPRESSION_STRATEGY=smart_truncate
+# MAX_MESSAGES=25
+# MAX_TOKENS=8000
+# COMPRESSION_THRESHOLD=12
+
+# 【场景4：成本优先】
+# COMPRESSION_STRATEGY=token_limit
+# MAX_MESSAGES=12
+# MAX_TOKENS=3000
+# COMPRESSION_THRESHOLD=6
+
+# 【场景5：开发调试（禁用压缩）】
+# ENABLE_COMPRESSION=false
+# MAX_MESSAGES=100
+# MAX_TOKENS=20000
+# COMPRESSION_THRESHOLD=999
+
+# ============================================
+# 其他配置
+# ============================================
+
+# 会话过期时间（秒）
+# 说明: 超过此时间无活动的会话将被清理
+SESSION_TIMEOUT=1800
+
+# 清理任务执行时间
+# 说明: 每天定时清理过期会话的时间（24小时制）
+CLEANUP_TIME=02:00:00
+
+# 最大重试次数
+MAX_RETRIES=3
+
+# 工具调用链最大深度
+MAX_TOOL_CHAIN_DEPTH=5
+
+# ============================================
+# 监控和调优建议
+# ============================================
+
+# 1. 监控指标
+#    - 压缩率: 目标30%-50%
+#    - 平均token数: 控制在MAX_TOKENS的70%
+#    - 响应时间: 应比无压缩时快20%-30%
+#    - 对话质量: 用户满意度不应明显下降
+
+# 2. 调优步骤
+#    a) 从推荐配置开始
+#    b) 观察1-2天实际运行情况
+#    c) 根据监控指标微调参数
+#    d) 如果压缩率过高(>60%)，适当增大MAX_MESSAGES
+#    e) 如果成本仍高，适当降低MAX_TOKENS
+
+# 3. 问题排查
+#    - 对话不连贯: 增大COMPRESSION_THRESHOLD
+#    - Token超限: 降低MAX_TOKENS或切换到token_limit策略
+#    - 工具调用失败: 确认使用smart_truncate或hybrid策略
+
+# ============================================
+# 版本信息
+# ============================================
+# 配置版本: 1.0
+# 更新日期: 2025-10-04
+# 兼容版本: tool_chains_streaming2.py v1.0+
+

@@ -17,6 +17,9 @@ from dotenv import load_dotenv
 load_dotenv()  # 加载.env文件中的环境变量
 from contextlib import asynccontextmanager
 
+# 导入上下文压缩模块
+from context_compression import create_compressor, CompressionConfig, CompressionStrategy
+
 
 # 使用 lifespan 管理启动和关闭逻辑
 @asynccontextmanager
@@ -61,6 +64,22 @@ conversation_history: Dict[str, dict] = {}
 history_lock = Lock()
 max_retries = 3
 max_tool_chain_depth = 5  # 最大工具调用链深度
+
+# 上下文压缩配置
+ENABLE_COMPRESSION = os.getenv("ENABLE_COMPRESSION", "true").lower() == "true"
+COMPRESSION_STRATEGY = os.getenv("COMPRESSION_STRATEGY", "hybrid")
+MAX_MESSAGES = int(os.getenv("MAX_MESSAGES", "20"))
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "6000"))
+COMPRESSION_THRESHOLD = int(os.getenv("COMPRESSION_THRESHOLD", "10"))  # 消息数超过此值才压缩
+
+# 创建全局压缩器实例
+context_compressor = create_compressor(
+    strategy=COMPRESSION_STRATEGY,
+    max_messages=MAX_MESSAGES,
+    max_tokens=MAX_TOKENS,
+    keep_recent_messages=6,
+    preserve_tool_calls=True
+)
 
 # 请求模型
 class QueryRequest(BaseModel):
@@ -261,11 +280,28 @@ async def stream_conversation(request: QueryRequest) -> AsyncGenerator[str, None
     user_message = {"role": "user", "content": query}
     messages.append(user_message)
 
+    # 上下文压缩（如果需要）
+    original_message_count = len(messages)
+    if ENABLE_COMPRESSION and len(messages) > COMPRESSION_THRESHOLD:
+        print(f"\n🗜️ 触发上下文压缩 (消息数: {len(messages)} > {COMPRESSION_THRESHOLD})")
+        messages_before_compression = messages.copy()
+        messages = context_compressor.compress(messages)
+        
+        # 获取压缩统计
+        stats = context_compressor.get_compression_stats(messages_before_compression, messages)
+        print(f"📊 压缩统计:")
+        print(f"   - 消息数: {stats['original_messages']} → {stats['compressed_messages']} (减少 {stats['reduction_rate']})")
+        print(f"   - Token数: {stats['original_tokens']} → {stats['compressed_tokens']} (节省 {stats['token_reduction_rate']})")
+        
+        # 更新会话历史
+        with history_lock:
+            conversation_history[conversation_id]["messages"] = messages
+
     # 打印用户输入
     print(f"\n{'=' * 50}")
     print(f"💬 用户输入: {query}")
     print(f"📝 会话ID: {conversation_id}")
-    print(f"📋 当前消息数: {len(messages)}")
+    print(f"📋 当前消息数: {len(messages)} (原始: {original_message_count})")
 
     retries = 0
     tool_chain_depth = 0
@@ -369,17 +405,14 @@ async def stream_conversation(request: QueryRequest) -> AsyncGenerator[str, None
 
                 # 3. 处理结束原因
                 if finish_reason:
-                    if content_parts:
-                        full_text = "".join(content_parts)
-                        messages.append({
-                            "role": "assistant",
-                            "content": full_text
-                        })
-
                     # 处理工具调用
                     if finish_reason == "tool_calls" and collected_tool_calls:
                         print("\n🛠️ 检测到工具调用请求")
                         break  # 跳出循环处理工具
+                    
+                    # 其他结束原因，跳出循环（消息会在后面统一处理）
+                    if content_parts:
+                        break
 
             # 处理收集到的工具调用
             if collected_tool_calls:
@@ -393,6 +426,15 @@ async def stream_conversation(request: QueryRequest) -> AsyncGenerator[str, None
                 }
                 print(f"\n🔧 开始处理 {len(tool_calls)} 个工具调用")
                 yield json.dumps(tool_start_event)
+
+                # 如果有content，先添加纯文本消息
+                if content_parts:
+                    full_text = "".join(content_parts)
+                    messages.append({
+                        "role": "assistant",
+                        "content": full_text
+                    })
+                    print(f"\n💬 工具调用前的说明: {full_text}")
 
                 # 记录工具调用消息
                 tool_call_msg = {
@@ -512,6 +554,53 @@ async def stream_query_endpoint(request: QueryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/conversation/{conversation_id}/stats")
+async def get_conversation_stats(conversation_id: str):
+    """获取会话统计信息，包括压缩状态"""
+    with history_lock:
+        if conversation_id not in conversation_history:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        
+        conv_data = conversation_history[conversation_id]
+        messages = conv_data["messages"]
+        
+        # 计算token统计
+        total_tokens = context_compressor.count_messages_tokens(messages)
+        
+        # 计算各角色消息数
+        role_counts = {}
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            role_counts[role] = role_counts.get(role, 0) + 1
+        
+        return {
+            "conversation_id": conversation_id,
+            "message_count": len(messages),
+            "total_tokens": total_tokens,
+            "role_distribution": role_counts,
+            "created_at": conv_data.get("created_at"),
+            "updated_at": conv_data.get("updated_at"),
+            "compression_enabled": ENABLE_COMPRESSION,
+            "compression_strategy": COMPRESSION_STRATEGY,
+            "max_messages": MAX_MESSAGES,
+            "max_tokens": MAX_TOKENS
+        }
+
+
+@app.get("/compression/config")
+async def get_compression_config():
+    """获取压缩配置"""
+    return {
+        "enabled": ENABLE_COMPRESSION,
+        "strategy": COMPRESSION_STRATEGY,
+        "max_messages": MAX_MESSAGES,
+        "max_tokens": MAX_TOKENS,
+        "compression_threshold": COMPRESSION_THRESHOLD,
+        "keep_recent_messages": 6,
+        "preserve_tool_calls": True
+    }
+
+
 # 清理过期会话的定时任务
 import threading
 
@@ -571,6 +660,12 @@ if __name__ == "__main__":
     print(f"🔑 API密钥: {'已设置' if api_key else '未设置'}")
     print(f"🤖 模型名称: {model_name}")
     print(f"🛠️ 注册工具: {', '.join(tool_registry.keys())}")
+    print(f"\n🗜️ 上下文压缩:")
+    print(f"   - 状态: {'启用' if ENABLE_COMPRESSION else '禁用'}")
+    print(f"   - 策略: {COMPRESSION_STRATEGY}")
+    print(f"   - 最大消息数: {MAX_MESSAGES}")
+    print(f"   - 最大Token数: {MAX_TOKENS}")
+    print(f"   - 压缩阈值: {COMPRESSION_THRESHOLD}")
     print("=" * 50)
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
