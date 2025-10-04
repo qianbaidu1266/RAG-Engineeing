@@ -14,12 +14,14 @@ import asyncio
 import time
 import openai
 import uuid
+from dotenv import load_dotenv
+load_dotenv()  # 加载.env文件中的环境变量
 
 # 配置初始化
 app = FastAPI(title="工具链调用-支持流式响应")
 
 client = OpenAI(
-    api_key="sk-e4c8f84ef814473bbb396f5204d179d1",
+    api_key= os.getenv("DASHSCOPE_API_KEY"),
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 

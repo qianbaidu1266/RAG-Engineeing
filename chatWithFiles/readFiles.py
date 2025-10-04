@@ -3,19 +3,19 @@ from fastapi.responses import JSONResponse
 from openai import AsyncOpenAI
 import json
 import pdfplumber
-import asyncio
-import os
-from typing import Dict, Any
-
 from openai import OpenAI
 import json
 import dashscope
 from math import sqrt, sin, cos  # 数学计算相关
+import os
+from dotenv import load_dotenv
+load_dotenv()  # 加载.env文件中的环境变量
+
 
 app = FastAPI()
 
 client = OpenAI(
-    api_key="sk-e4c8f84ef814473bbb396f5204d179d1",
+    api_key=os.getenv("DASHSCOPE_API_KEY"),
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 

@@ -40,21 +40,21 @@ app.add_middleware(
 )
 
 # 从环境变量获取API密钥
-api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("DASHSCOPE_API_KEY")
 if not api_key:
     # 回退机制：仅用于开发和测试环境
     api_key = "your_test_api_key_here"  # 替换为测试密钥
 
 # 使用异步客户端
-# async_client = AsyncOpenAI(
-#     api_key= api_key,  # 从环境变量获取
-#     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
-# )
-
 async_client = AsyncOpenAI(
-    api_key= "3eea50f1-9d0b-492f-a552-672deaf9f515",  # 从环境变量获取
-    base_url="https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+    api_key= api_key,  # 从环境变量获取
+    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
+
+# async_client = AsyncOpenAI(
+#     api_key= "3eea50f1-9d0b-492f-a552-672deaf9f515",  # 从环境变量获取
+#     base_url="https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+# )
 
 # 安全会话管理
 conversation_history: Dict[str, dict] = {}
@@ -76,7 +76,7 @@ async def generate_conversation_id():
 
 
 # ================== 工具定义 ==================
-model_name = "DeepSeek-R1-Distill-Qwen-32B"
+model_name = "qwen3-max"
 
 system_prompt = """你是一个智能助手，需要根据问题类型选择合适工具获取信息。可用工具包括：
 1. 城市编码查询工具（get_city_code）- 根据城市名称查询城市编码
