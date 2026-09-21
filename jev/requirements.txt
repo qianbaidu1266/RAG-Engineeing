@@ -1,0 +1,5 @@
+# Jev / TypeSafe 官方 Python SDK
+typesafe-sdk
+
+# 可选：用于从 .env 文件加载 TYPESAFE_API_KEY
+python-dotenv
